@@ -21,6 +21,7 @@
 #include "nsi_hw_scheduler.h"
 #include "nsi_config.h"
 #include "nsi_cpu_ctrl.h"
+#include <pthread.h>
 
 int nsi_exit_inner(int exit_code)
 {
@@ -53,7 +54,8 @@ int nsi_exit_inner(int exit_code)
 
 NSI_FUNC_NORETURN void nsi_exit(int exit_code)
 {
-	fprintf(stderr, "DBGREBOOT: nsi_exit(%d) calling glibc exit()\n", exit_code);
+	fprintf(stderr, "DBGREBOOT: nsi_exit(%d) calling glibc exit() (tid=%lu)\n",
+		exit_code, (unsigned long)pthread_self());
 	exit(nsi_exit_inner(exit_code));
 }
 

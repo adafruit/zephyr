@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdio.h>
+
+#include <stdio.h>
+#include <pthread.h>
+
 /**
  * @brief Run the set of special native tasks corresponding to the given level
  *
@@ -32,7 +37,11 @@ void run_native_tasks(int level)
 	for (fptr = native_pre_tasks[level]; fptr < native_pre_tasks[level+1];
 		fptr++) {
 		if (*fptr) { /* LCOV_EXCL_BR_LINE */
+			fprintf(stderr, "DBGREBOOT: run_native_tasks(level=%d) calling task %p (tid=%lu)\n",
+				level, (void *)*fptr, (unsigned long)pthread_self());
 			(*fptr)();
+			fprintf(stderr, "DBGREBOOT: run_native_tasks(level=%d) task %p returned\n",
+				level, (void *)*fptr);
 		}
 	}
 }

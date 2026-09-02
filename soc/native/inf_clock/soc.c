@@ -33,6 +33,8 @@
 #include "soc.h"
 #include "nce_if.h"
 
+#include <stdio.h>
+
 static void *nce_st;
 
 int posix_is_cpu_running(void)
@@ -133,7 +135,11 @@ void posix_boot_cpu(void)
  */
 void posix_soc_clean_up(void)
 {
+	fprintf(stderr, "DBGREBOOT: posix_soc_clean_up enter\n");
 	nce_terminate(nce_st);
+	fprintf(stderr, "DBGREBOOT: posix_soc_clean_up nce_terminate done, calling posix_arch_clean_up\n");
 	posix_arch_clean_up();
+	fprintf(stderr, "DBGREBOOT: posix_arch_clean_up done, running _NATIVE_ON_EXIT tasks\n");
 	run_native_tasks(_NATIVE_ON_EXIT_LEVEL);
+	fprintf(stderr, "DBGREBOOT: posix_soc_clean_up done\n");
 }
