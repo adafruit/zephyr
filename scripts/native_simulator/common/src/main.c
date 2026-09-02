@@ -27,6 +27,7 @@ int nsi_exit_inner(int exit_code)
 	static int max_exit_code;
 	int cpu_ret;
 
+	fprintf(stderr, "DBGREBOOT: nsi_exit_inner(exit_code=%d) enter\n", exit_code);
 	max_exit_code = NSI_MAX(exit_code, max_exit_code);
 	/*
 	 * nsif_cpun_cleanup may not return if this is called from a SW thread,
@@ -34,18 +35,25 @@ int nsi_exit_inner(int exit_code)
 	 * ASAP from the HW thread
 	 */
 	for (int i = 0; i < NSI_N_CPUS; i++) {
+		fprintf(stderr, "DBGREBOOT: nsi_exit_inner calling nsif_cpun_cleanup(%d)\n", i);
 		cpu_ret = nsif_cpun_cleanup(i);
+		fprintf(stderr, "DBGREBOOT: nsi_exit_inner nsif_cpun_cleanup(%d) returned %d\n", i, cpu_ret);
 		max_exit_code = NSI_MAX(cpu_ret, max_exit_code);
 	}
 
+	fprintf(stderr, "DBGREBOOT: nsi_exit_inner running ON_EXIT_PRE tasks\n");
 	nsi_run_tasks(NSITASK_ON_EXIT_PRE_LEVEL);
+	fprintf(stderr, "DBGREBOOT: nsi_exit_inner ON_EXIT_PRE tasks done, calling nsi_hws_cleanup\n");
 	nsi_hws_cleanup();
+	fprintf(stderr, "DBGREBOOT: nsi_exit_inner nsi_hws_cleanup done, running ON_EXIT_POST tasks\n");
 	nsi_run_tasks(NSITASK_ON_EXIT_POST_LEVEL);
+	fprintf(stderr, "DBGREBOOT: nsi_exit_inner ON_EXIT_POST tasks done, returning %d\n", max_exit_code);
 	return max_exit_code;
 }
 
 NSI_FUNC_NORETURN void nsi_exit(int exit_code)
 {
+	fprintf(stderr, "DBGREBOOT: nsi_exit(%d) calling glibc exit()\n", exit_code);
 	exit(nsi_exit_inner(exit_code));
 }
 

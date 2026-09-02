@@ -17,6 +17,7 @@
 
 void posix_exit(int exit_code)
 {
+	fprintf(stderr, "DBGREBOOT: posix_exit(%d) calling nsi_exit\n", exit_code);
 	nsi_exit(exit_code);
 }
 

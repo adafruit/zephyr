@@ -11,6 +11,13 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/debug/gcov.h>
 
+#if defined(CONFIG_ARCH_POSIX)
+#include <stdio.h>
+#define DBGREBOOT(fmt, ...) fprintf(stderr, "DBGREBOOT: " fmt, ##__VA_ARGS__)
+#else
+#define DBGREBOOT(fmt, ...) do {} while (0)
+#endif
+
 extern void sys_arch_reboot(int type);
 
 FUNC_NORETURN void sys_reboot(int type)
@@ -42,7 +49,9 @@ FUNC_NORETURN void sys_reboot(int type)
 		sys_clock_disable();
 	}
 
+	DBGREBOOT("sys_reboot(type=%d) calling sys_arch_reboot\n", type);
 	sys_arch_reboot(type);
+	DBGREBOOT("sys_reboot(type=%d) sys_arch_reboot returned!\n", type);
 
 	/* should never get here */
 	printk("Failed to reboot: spinning endlessly...\n");

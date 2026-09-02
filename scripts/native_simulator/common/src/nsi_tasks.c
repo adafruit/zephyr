@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdio.h>
+
 /**
  * @brief Run the set of special NSI tasks corresponding to the given level
  *
@@ -36,7 +38,11 @@ void nsi_run_tasks(int level)
 	for (fptr = nsi_pre_tasks[level]; fptr < nsi_pre_tasks[level+1];
 		fptr++) {
 		if (*fptr) { /* LCOV_EXCL_BR_LINE */
+			fprintf(stderr, "DBGREBOOT: nsi_run_tasks(level=%d) calling task %p\n",
+				level, (void *)*fptr);
 			(*fptr)();
+			fprintf(stderr, "DBGREBOOT: nsi_run_tasks(level=%d) task %p returned\n",
+				level, (void *)*fptr);
 		}
 	}
 }
