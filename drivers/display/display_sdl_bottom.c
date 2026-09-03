@@ -75,6 +75,8 @@ int sdl_display_init_bottom(struct sdl_display_init_params *params)
 {
 	uint32_t window_flags = params->headless ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN;
 
+	nsi_print_warning("SDL video driver: %s", SDL_GetCurrentVideoDriver());
+
 	/* clang-format off */
 	*params->window = SDL_CreateWindow(params->title, SDL_WINDOWPOS_UNDEFINED,
 				   SDL_WINDOWPOS_UNDEFINED,
