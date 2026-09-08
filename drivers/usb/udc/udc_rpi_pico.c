@@ -273,6 +273,70 @@ static int rpi_pico_prep_rx(const struct device *dev,
 	return 0;
 }
 
+/*
+ * The USB dual-port RAM is Device memory, and Cortex-M never permits unaligned
+ * accesses to it. picolibc's memcpy on the RP2350's Cortex-M33 emits wider
+ * transfers whenever it can, so as soon as a class driver hands us a payload at
+ * an address whose alignment differs from the DPRAM buffer's, the copy faults:
+ *
+ *   USAGE FAULT / Unaligned memory access, pc=memcpy, lr=rpi_pico_prep_tx
+ *
+ * This does not bite on the RP2040 because the Cortex-M0+ has no wide unaligned
+ * copy to begin with, so its memcpy degrades to byte accesses. Do the DPRAM side
+ * of the copy in explicit 32-bit accesses (the buffers are word aligned by
+ * layout) and assemble/split bytes on the ordinary-RAM side, which is alignment
+ * agnostic. The endpoint buffer is not being read by the controller here: the
+ * caller holds the IRQ lock and has not yet set USB_BUF_CTRL_AVAIL.
+ */
+static void rpi_pico_dpram_write(void *dpram_dst, const uint8_t *src, size_t len)
+{
+	volatile uint32_t *dst = dpram_dst;
+	size_t words = len / 4U;
+	size_t rem = len & 3U;
+
+	for (size_t i = 0; i < words; i++) {
+		dst[i] = (uint32_t)src[0] | ((uint32_t)src[1] << 8) |
+			 ((uint32_t)src[2] << 16) | ((uint32_t)src[3] << 24);
+		src += 4;
+	}
+
+	if (rem != 0U) {
+		/* Read-modify-write so the bytes past len keep their value. */
+		uint32_t val = dst[words];
+
+		for (size_t i = 0; i < rem; i++) {
+			val &= ~(0xffUL << (i * 8));
+			val |= (uint32_t)src[i] << (i * 8);
+		}
+		dst[words] = val;
+	}
+}
+
+static void rpi_pico_dpram_read(uint8_t *dst, const void *dpram_src, size_t len)
+{
+	const volatile uint32_t *src = dpram_src;
+	size_t words = len / 4U;
+	size_t rem = len & 3U;
+
+	for (size_t i = 0; i < words; i++) {
+		uint32_t val = src[i];
+
+		dst[0] = (uint8_t)val;
+		dst[1] = (uint8_t)(val >> 8);
+		dst[2] = (uint8_t)(val >> 16);
+		dst[3] = (uint8_t)(val >> 24);
+		dst += 4;
+	}
+
+	if (rem != 0U) {
+		uint32_t val = src[words];
+
+		for (size_t i = 0; i < rem; i++) {
+			dst[i] = (uint8_t)(val >> (i * 8));
+		}
+	}
+}
+
 static int rpi_pico_prep_tx(const struct device *dev,
 			    struct net_buf *const buf, struct udc_ep_config *const cfg)
 {
@@ -290,7 +354,7 @@ static int rpi_pico_prep_tx(const struct device *dev,
 	lock_key = irq_lock();
 
 	len = MIN(cfg->mps, buf->len);
-	memcpy(ep_data->buf, buf->data, len);
+	rpi_pico_dpram_write(ep_data->buf, buf->data, len);
 
 	LOG_DBG("Prepare TX ep 0x%02x len %u pid: %u",
 		cfg->addr, len, ep_data->next_pid);
@@ -512,6 +576,7 @@ static void rpi_pico_handle_buff_status_out(const struct device *dev, const uint
 	struct rpi_pico_data *priv = udc_get_private(dev);
 	struct net_buf *buf;
 	size_t len;
+	size_t copy_len;
 
 	buf = udc_buf_peek(ep_cfg);
 	if (buf == NULL) {
@@ -521,7 +586,9 @@ static void rpi_pico_handle_buff_status_out(const struct device *dev, const uint
 	}
 
 	len = read_buf_ctrl_reg(dev, ep) & USB_BUF_CTRL_LEN_MASK;
-	net_buf_add_mem(buf, ep_data->buf, MIN(len, net_buf_tailroom(buf)));
+	/* Keep len as received; the short-packet check below compares it to mps. */
+	copy_len = MIN(len, net_buf_tailroom(buf));
+	rpi_pico_dpram_read(net_buf_add(buf, copy_len), ep_data->buf, copy_len);
 
 	if (net_buf_tailroom(buf) && len == udc_mps_ep_size(ep_cfg)) {
 		__unused int err;
