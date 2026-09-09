@@ -829,17 +829,50 @@ static void airoc_event_task(void)
 		}
 #endif
 #endif
-		switch ((whd_event_num_t)event_header.event_type) {
-		case WLC_E_LINK:
-			break;
+		if (airoc_event.is_ap_event) {
+			/*
+			 * Events registered by ap_enable() are about stations joining
+			 * or leaving our own AP. A station's deauth must not take the
+			 * interface dormant the way a lost STA link (below) does --
+			 * that silently killed the AP's IP traffic the moment the
+			 * first client left. Without wpa_supplicant nothing else turns
+			 * these into wifi_mgmt events, so raise them here; with it,
+			 * hostapd reports them through its own callbacks.
+			 */
+#if !defined(CONFIG_WIFI_NM_WPA_SUPPLICANT)
+			struct wifi_ap_sta_info sta_info = {
+				.link_mode = WIFI_LINK_MODE_UNKNOWN,
+				.mac_length = WIFI_MAC_ADDR_LEN,
+			};
 
-		case WLC_E_DEAUTH_IND:
-		case WLC_E_DISASSOC_IND:
-			net_if_dormant_on(airoc_wifi_iface);
-			break;
+			memcpy(sta_info.mac, event_header.addr.octet, WIFI_MAC_ADDR_LEN);
 
-		default:
-			break;
+			switch ((whd_event_num_t)event_header.event_type) {
+			case WLC_E_ASSOC_IND:
+			case WLC_E_REASSOC_IND:
+				wifi_mgmt_raise_ap_sta_connected_event(airoc_wifi_iface, &sta_info);
+				break;
+			case WLC_E_DEAUTH_IND:
+			case WLC_E_DISASSOC_IND:
+				wifi_mgmt_raise_ap_sta_disconnected_event(airoc_wifi_iface, &sta_info);
+				break;
+			default:
+				break;
+			}
+#endif
+		} else {
+			switch ((whd_event_num_t)event_header.event_type) {
+			case WLC_E_LINK:
+				break;
+
+			case WLC_E_DEAUTH_IND:
+			case WLC_E_DISASSOC_IND:
+				net_if_dormant_on(airoc_wifi_iface);
+				break;
+
+			default:
+				break;
+			}
 		}
 		if (airoc_event.whd_event_data) {
 			if (airoc_event.whd_event_data->event_header) {
@@ -1122,34 +1155,33 @@ static int airoc_mgmt_ap_enable(const struct device *dev,
 	ssid.length = params->ssid_length;
 	memcpy(ssid.value, params->ssid, ssid.length);
 
-	/* make sure to set valid channels for 2G and 5G:
+	/*
+	 * whd_wifi_init_ap() takes a bare channel number: it builds the chanspec
+	 * itself with CH20MHZ_CHSPEC(), which picks the band by comparing the
+	 * value against CH_MAX_2G_CHANNEL and ORs in the 20 MHz bandwidth bits.
+	 * Handing it a value that already carries band and bandwidth bits (as this
+	 * function used to) makes that comparison see a "channel" of 0x1001 and
+	 * classify every 2.4 GHz channel as 5 GHz, so the firmware rejected the
+	 * resulting chanspec (0xd001 for channel 1) with WLAN_BADCHAN and no AP
+	 * could ever start. Keep the validation, drop the composition; only 20 MHz
+	 * is expressible through this WHD entry point.
+	 *
+	 * make sure to set valid channels for 2G and 5G:
 	 * - 2G channels from 1 to 11,
 	 * - 5G channels from 36 to 165
 	 */
-	if ((params->channel > 0) && (params->channel < 12)) {
-		chanspec = params->channel | GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BAND_2G);
-	} else if ((params->channel > 35) && (params->channel < 166)) {
-		chanspec = params->channel | GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BAND_5G);
+	if (((params->channel > 0) && (params->channel < 12)) ||
+	    ((params->channel > 35) && (params->channel < 166))) {
+		chanspec = params->channel;
 	} else {
-		chanspec = 1 | GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BAND_2G);
+		chanspec = 1;
 		LOG_WRN("Discard of setting unsupported channel: %u (will set 1)", params->channel);
 	}
 
-	switch (params->bandwidth) {
-	case WIFI_FREQ_BANDWIDTH_20MHZ:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_20);
-		break;
-	case WIFI_FREQ_BANDWIDTH_40MHZ:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_40);
-		break;
-	case WIFI_FREQ_BANDWIDTH_80MHZ:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_80);
-		break;
-	default:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_20);
+	if (params->bandwidth != WIFI_FREQ_BANDWIDTH_20MHZ &&
+	    params->bandwidth != WIFI_FREQ_BANDWIDTH_UNKNOWN) {
 		LOG_WRN("Discard of setting unsupported bandwidth: %u (will set 20MHz)",
 			params->bandwidth);
-		break;
 	}
 
 	switch (params->security) {
