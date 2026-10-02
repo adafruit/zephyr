@@ -379,6 +379,31 @@ static int pwm_nrfx_pm_action(const struct device *dev,
 	return 0;
 }
 
+static int pwm_nrfx_deinit(const struct device *dev)
+{
+	struct pwm_nrfx_data *data = dev->data;
+	int ret;
+
+	if (IS_ENABLED(CONFIG_PM_DEVICE)) {
+		/* PM must have suspended the device before it can be deinitialized. */
+		ret = pm_device_driver_deinit(dev, pwm_nrfx_pm_action);
+	} else {
+		/* Without CONFIG_PM_DEVICE, the PM action callback does not handle
+		 * PM_DEVICE_ACTION_SUSPEND (it returns -ENOTSUP), so suspend the
+		 * peripheral directly, as the i2c_nrfx_twim and uart_nrfx_uarte
+		 * drivers do in their deinit paths.
+		 */
+		ret = pwm_suspend(dev);
+	}
+	if (ret < 0) {
+		return ret;
+	}
+
+	nrfx_pwm_uninit(&data->pwm);
+
+	return 0;
+}
+
 static int pwm_nrfx_init(const struct device *dev)
 {
 	const struct pwm_nrfx_config *config = dev->config;
@@ -451,7 +476,7 @@ static int pwm_nrfx_init(const struct device *dev)
 	};									     \
 	PM_DEVICE_DT_INST_DEFINE(inst, pwm_nrfx_pm_action);			     \
 	DEVICE_DT_INST_DEINIT_DEFINE(inst,					     \
-				     pwm_nrfx_init##inst, NULL,			     \
+				     pwm_nrfx_init##inst, pwm_nrfx_deinit,	     \
 				     PM_DEVICE_DT_INST_GET(inst),		     \
 				     &pwm_nrfx_##inst##_data,			     \
 				     &pwm_nrfx_##inst##_config,			     \
