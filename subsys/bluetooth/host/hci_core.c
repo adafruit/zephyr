@@ -4741,6 +4741,7 @@ int bt_enable(bt_ready_cb_t cb)
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		err = bt_settings_init();
 		if (err) {
+			atomic_clear_bit(bt_dev.flags, BT_DEV_ENABLE);
 			return err;
 		}
 	} else if (IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {
@@ -4775,6 +4776,15 @@ int bt_enable(bt_ready_cb_t cb)
 	err = bt_hci_open(bt_dev.hci, bt_recv);
 	if (err) {
 		LOG_ERR("HCI driver open failed (%d)", err);
+#if defined(CONFIG_BT_RECV_WORKQ_BT)
+		k_thread_abort(bt_workq.thread_id);
+#endif
+		ready_cb = NULL;
+		/* bt_init() has not run, so bt_disable() cannot safely unwind
+		 * the host. Release enable only after the RX thread is stopped
+		 * so another attempt can open the controller and initialize it.
+		 */
+		atomic_clear_bit(bt_dev.flags, BT_DEV_ENABLE);
 		return err;
 	}
 
