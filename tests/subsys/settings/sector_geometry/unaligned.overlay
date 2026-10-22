@@ -1,0 +1,6 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* No erase-page start falls within this 2 KiB area on the 4 KiB flash. */
+&storage_partition {
+	reg = <0x000fc800 0x00000800>;
+};
