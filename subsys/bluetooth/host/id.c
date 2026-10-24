@@ -1805,7 +1805,7 @@ static bool is_legacy_adv_enabled(void)
 	return adv != NULL && atomic_test_bit(adv->flags, BT_ADV_ENABLED);
 }
 
-static bool is_legacy_adv_using_id_addr(void)
+static struct bt_le_ext_adv *get_legacy_adv_using_id_addr(void)
 {
 	struct bt_le_ext_adv *adv;
 
@@ -1816,13 +1816,17 @@ static bool is_legacy_adv_using_id_addr(void)
 		 * advertising HCI commands then only the scanner uses the set
 		 * random address command.
 		 */
-		return false;
+		return NULL;
 	}
 
 	adv = bt_le_adv_lookup_legacy();
 
-	return adv != NULL && atomic_test_bit(adv->flags, BT_ADV_ENABLED)
-			   && atomic_test_bit(adv->flags, BT_ADV_USE_IDENTITY);
+	if (adv != NULL && atomic_test_bit(adv->flags, BT_ADV_ENABLED) &&
+	    atomic_test_bit(adv->flags, BT_ADV_USE_IDENTITY)) {
+		return adv;
+	}
+
+	return NULL;
 }
 
 int bt_id_set_scan_own_addr(bool active_scan, uint8_t *own_addr_type)
@@ -1862,8 +1866,12 @@ int bt_id_set_scan_own_addr(bool active_scan, uint8_t *own_addr_type)
 			 * sets have their own addresses, so we can always change the scanner
 			 * address here.
 			 */
-			if (is_legacy_adv_using_id_addr()) {
-				if (bt_dev.id_addr[BT_ID_DEFAULT].type == BT_ADDR_LE_RANDOM) {
+			struct bt_le_ext_adv *adv =
+				get_legacy_adv_using_id_addr();
+
+			if (adv != NULL) {
+				if (bt_dev.id_addr[adv->id].type ==
+				    BT_ADDR_LE_RANDOM) {
 					*own_addr_type = BT_HCI_OWN_ADDR_RANDOM;
 				} else {
 					*own_addr_type = BT_HCI_OWN_ADDR_PUBLIC;

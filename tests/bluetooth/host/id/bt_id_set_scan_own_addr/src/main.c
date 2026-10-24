@@ -253,3 +253,29 @@ ZTEST(bt_id_set_scan_own_addr, test_setting_scan_own_address_privacy_features_se
 	zassert_true(own_addr_type == BT_HCI_OWN_ADDR_RPA_OR_RANDOM,
 		     "Address type reference was incorrectly set");
 }
+
+/* A legacy advertiser may use a non-default random identity while the
+ * default identity is public. The scanner shares the advertiser's address.
+ */
+ZTEST(bt_id_set_scan_own_addr, test_scan_with_nondefault_advertising_identity)
+{
+	struct bt_le_ext_adv *adv = &bt_dev.adv;
+	uint8_t own_addr_type = BT_ADDR_LE_ANONYMOUS;
+
+	Z_TEST_SKIP_IFDEF(CONFIG_BT_PRIVACY);
+	Z_TEST_SKIP_IFDEF(CONFIG_BT_SCAN_WITH_IDENTITY);
+	Z_TEST_SKIP_IFNDEF(CONFIG_BT_BROADCASTER);
+
+	bt_addr_le_copy(&bt_dev.id_addr[BT_ID_DEFAULT], BT_LE_ADDR);
+	bt_addr_le_copy(&bt_dev.id_addr[1], BT_STATIC_RANDOM_LE_ADDR_1);
+	adv->id = 1;
+	atomic_set_bit(adv->flags, BT_ADV_ENABLED);
+	atomic_set_bit(adv->flags, BT_ADV_CONNECTABLE);
+	atomic_set_bit(adv->flags, BT_ADV_USE_IDENTITY);
+	bt_le_adv_lookup_legacy_fake.return_val = adv;
+
+	zassert_ok(bt_id_set_scan_own_addr(false, &own_addr_type));
+	zassert_equal(own_addr_type, BT_HCI_OWN_ADDR_RANDOM);
+	zassert_equal(bt_rand_fake.call_count, 0,
+		      "Must not change the advertiser's address");
+}

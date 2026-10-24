@@ -1026,8 +1026,14 @@ static int adv_start_legacy(struct bt_le_ext_adv *adv,
 
 	atomic_set_bit_to(adv->flags, BT_ADV_SCANNABLE, scannable);
 
+	/* Connectable advertising uses identity implicitly when privacy
+	 * is disabled.
+	 */
 	atomic_set_bit_to(adv->flags, BT_ADV_USE_IDENTITY,
-			  param->options & BT_LE_ADV_OPT_USE_IDENTITY);
+			  (param->options & BT_LE_ADV_OPT_USE_IDENTITY) ||
+			  (!IS_ENABLED(CONFIG_BT_PRIVACY) &&
+			   (param->options & BT_LE_ADV_OPT_CONN) &&
+			   !(param->options & BT_LE_ADV_OPT_USE_NRPA)));
 
 	return 0;
 }
@@ -1197,8 +1203,14 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 
 	atomic_set_bit_to(adv->flags, BT_ADV_SCANNABLE, scannable);
 
+	/* Connectable advertising uses identity implicitly when privacy
+	 * is disabled.
+	 */
 	atomic_set_bit_to(adv->flags, BT_ADV_USE_IDENTITY,
-			  param->options & BT_LE_ADV_OPT_USE_IDENTITY);
+			  (param->options & BT_LE_ADV_OPT_USE_IDENTITY) ||
+			  (!IS_ENABLED(CONFIG_BT_PRIVACY) &&
+			   (param->options & BT_LE_ADV_OPT_CONN) &&
+			   !(param->options & BT_LE_ADV_OPT_USE_NRPA)));
 
 	atomic_set_bit_to(adv->flags, BT_ADV_EXT_ADV,
 			  param->options & BT_LE_ADV_OPT_EXT_ADV);
