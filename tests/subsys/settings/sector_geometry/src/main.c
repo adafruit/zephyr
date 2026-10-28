@@ -1,4 +1,8 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * Copyright (c) 2026 Adafruit Industries
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <errno.h>
 #include <stdint.h>
