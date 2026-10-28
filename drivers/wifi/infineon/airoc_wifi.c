@@ -822,7 +822,8 @@ static void airoc_event_task(void)
 				break;
 			case WLC_E_DEAUTH_IND:
 			case WLC_E_DISASSOC_IND:
-				wifi_mgmt_raise_ap_sta_disconnected_event(airoc_wifi_iface, &sta_info);
+				wifi_mgmt_raise_ap_sta_disconnected_event(airoc_wifi_iface,
+									  &sta_info);
 				break;
 			default:
 				break;
