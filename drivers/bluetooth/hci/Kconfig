@@ -259,9 +259,21 @@ config BT_AMEBA
 	help
 	  AMEBA BT HCI driver
 
+config BT_TX_PROCESSOR_STACK_SIZE
+	# bt_send() runs on the TX processor work queue, and the shared-bus
+	# transport's path is far deeper than the UART drivers the 1024 default is
+	# sized for: hci_cyw43_send -> cybt_hci_write -> WHD backplane transfer ->
+	# PIO-SPI. At the default the thread overflows on the very first HCI
+	# command (Read_BD_ADDR).
+	default 4096 if BT_CYW43_SHARED_BUS
+
 config BT_HCI_INIT_PRIORITY
 	int "BT HCI init priority"
 	default 75 if BT_AMBIQ_HCI
+	# The CYW43 shared-bus HCI node is a devicetree child of the AIROC WiFi
+	# node and reaches the controller through it, so it must initialize after
+	# WIFI_INIT_PRIORITY (80) or Zephyr's init-priority validation fails.
+	default 81 if BT_CYW43_SHARED_BUS
 	default KERNEL_INIT_PRIORITY_DEVICE
 	help
 	  The priority of BT HCI driver initialization.
@@ -285,6 +297,25 @@ config BT_AIROC
 	  Infineon's AIROC™ Wi-Fi & combos portfolio integrates
 	  IEEE 802.11a/b/g/n/ac/ax Wi-Fi and Bluetooth® 5.2 in a single-chip
 	  solution to enable small-form-factor IoT designs.
+
+config BT_CYW43_SHARED_BUS
+	bool "CYW43 Bluetooth over the shared gSPI bus"
+	default y
+	depends on DT_HAS_INFINEON_CYW43_BT_HCI_ENABLED
+	depends on WIFI_AIROC
+	select BT_HCI_SETUP
+	help
+	  Bluetooth HCI transport for the Infineon CYW43439 on boards where the
+	  controller's HCI shares the WiFi gSPI bus rather than sitting on a
+	  UART — the Raspberry Pi Pico W and Pico 2 W. Runs pico-sdk's
+	  cybt_shared_bus transport over the AIROC/WHD WiFi driver's backplane,
+	  so it requires WIFI_AIROC and the georgerobotics cyw43-driver
+	  submodule of hal_rpi_pico for the controller patchram:
+
+	    git -C modules/hal/rpi_pico submodule update --init lib/cyw43-driver
+
+	  cyw43-driver v2.0.0 and later, including the patchram headers, are
+	  under the MIT license.
 source "drivers/bluetooth/hci/Kconfig.bflb"
 source "drivers/bluetooth/hci/Kconfig.esp32"
 source "drivers/bluetooth/hci/Kconfig.infineon"
