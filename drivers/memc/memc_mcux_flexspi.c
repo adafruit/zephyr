@@ -56,6 +56,12 @@ struct memc_flexspi_config {
 struct memc_flexspi_data {
 	DEVICE_MMIO_NAMED_RAM(reg_base);
 	DEVICE_MMIO_NAMED_RAM(ahb);
+	/* The mapped addresses, set by memc_flexspi_init(). Without an MMU,
+	 * DEVICE_MMIO_NAMED_GET() reads them from the config, which is in
+	 * flash and cannot be read while the flash is being written.
+	 */
+	FLEXSPI_Type *base;
+	uint8_t *ahb;
 	bool xip;
 	bool ahb_bufferable;
 	bool ahb_cacheable;
@@ -80,12 +86,12 @@ FSL_FEATURE_FLEXSPI_SUPPORT_SEPERATE_RXCLKSRC_PORTB
 
 static inline FLEXSPI_Type *get_base(const struct device *dev)
 {
-	return (FLEXSPI_Type *)DEVICE_MMIO_NAMED_GET(dev, reg_base);
+	return DEV_DATA(dev)->base;
 }
 
 static inline uint8_t *get_ahb(const struct device *dev)
 {
-	return (uint8_t *)DEVICE_MMIO_NAMED_GET(dev, ahb);
+	return DEV_DATA(dev)->ahb;
 }
 
 void memc_flexspi_wait_bus_idle(const struct device *dev)
@@ -194,6 +200,7 @@ int memc_flexspi_set_device_config(const struct device *dev,
 	uint8_t lut_used = 0U;
 	int ret;
 	uint32_t divider;
+	uint32_t root_clk;
 
 	if (port >= kFLEXSPI_PortCount) {
 		LOG_ERR("Invalid port number");
@@ -239,6 +246,19 @@ int memc_flexspi_set_device_config(const struct device *dev,
 	tmp_config.ARDSeqIndex += data->port_luts[port].lut_offset / MEMC_FLEXSPI_CMD_PER_SEQ;
 	tmp_config.AWRSeqIndex += data->port_luts[port].lut_offset / MEMC_FLEXSPI_CMD_PER_SEQ;
 
+	/* Get the real clock for DLL updating. Read it before reclocking:
+	 * clock_control_get_rate() may execute from flash, and once
+	 * memc_flexspi_update_clock() has changed the divider the FlexSPI runs
+	 * at the new speed with the old LUT until FLEXSPI_SetFlashConfig() and
+	 * FLEXSPI_UpdateLUT() below. update_clock() only changes the FlexSPI's
+	 * own divider, never the root clock, so the rate is still valid.
+	 */
+	ret = clock_control_get_rate(data->clock_dev, data->clock_subsys, &root_clk);
+	if (ret < 0) {
+		LOG_ERR("memc flexspi get root clock error: %d", ret);
+		return ret;
+	}
+
 	/* Set FlexSPI clock to the max frequency flash can support.
 	 * FLEXSPI_SetFlashConfig only update DLL but not the freq divider.
 	 */
@@ -249,15 +269,8 @@ int memc_flexspi_set_device_config(const struct device *dev,
 		return ret;
 	}
 
-	/* Get the real clock for DLL updating. */
-	ret = clock_control_get_rate(data->clock_dev, data->clock_subsys,
-				&tmp_config.flexspiRootClk);
-	if (ret < 0) {
-		LOG_ERR("memc flexspi get root clock error: %d", ret);
-		return ret;
-	}
 	divider = (base->MCR0 & FLEXSPI_MCR0_SERCLKDIV_MASK) >> FLEXSPI_MCR0_SERCLKDIV_SHIFT;
-	tmp_config.flexspiRootClk /= (divider + 1);
+	tmp_config.flexspiRootClk = root_clk / (divider + 1);
 
 	/* Lock IRQs before reconfiguring FlexSPI, to prevent XIP */
 #if CONFIG_FLASH_MCUX_FLEXSPI_XIP
@@ -339,7 +352,7 @@ void *memc_flexspi_get_ahb_address(const struct device *dev,
 		flexspi_port_t port, off_t offset)
 {
 	struct memc_flexspi_data *data = dev->data;
-	uint8_t *ahb_base = (uint8_t *)DEVICE_MMIO_NAMED_GET(dev, ahb);
+	uint8_t *ahb_base = get_ahb(dev);
 	int i;
 
 	if (port >= kFLEXSPI_PortCount) {
@@ -404,6 +417,12 @@ static int memc_flexspi_init(const struct device *dev)
 	DEVICE_MMIO_NAMED_MAP(dev, reg_base, K_MEM_CACHE_NONE | K_MEM_DIRECT_MAP);
 	DEVICE_MMIO_NAMED_MAP(dev, ahb, data->ahb_cacheable ? K_MEM_DIRECT_MAP
 				: (K_MEM_CACHE_NONE | K_MEM_DIRECT_MAP));
+	/* Save the mapped addresses in RAM. Without an MMU,
+	 * DEVICE_MMIO_NAMED_GET() reads them from the config, which is in
+	 * flash, and the flash cannot be read while it is being written.
+	 */
+	data->base = (FLEXSPI_Type *)DEVICE_MMIO_NAMED_GET(dev, reg_base);
+	data->ahb = (uint8_t *)DEVICE_MMIO_NAMED_GET(dev, ahb);
 	base = get_base(dev);
 
 	/* we should not configure the device we are running on */
