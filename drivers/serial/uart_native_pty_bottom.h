@@ -23,6 +23,7 @@ extern "C" {
 int np_uart_stdin_read_bottom(int in_f, unsigned char *p_char, int len);
 void np_uart_drain_bottom(int fd, int max_ms);
 int np_uart_slave_connected(int fd);
+void np_uart_wait_writable_bottom(int fd);
 int np_uart_open_pty(const char *uart_name, const char *auto_attach_cmd,
 		     bool do_auto_attach, bool wait_pts);
 int np_uart_pty_get_stdin_fileno(void);

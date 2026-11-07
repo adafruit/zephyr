@@ -276,7 +276,24 @@ static int np_uart_poll_out_n(struct native_pty_status *d, const unsigned char *
 		}
 	}
 
-	ret = nsi_host_write(d->out_fd, buf, len);
+	/* poll_out() must not lose characters. When the PTY buffer is full, wait
+	 * for the reader to make room, as a real UART waits for its transmitter.
+	 * Drop the rest only if nothing is attached to read it.
+	 */
+	size_t sent = 0;
+
+	while (sent < len) {
+		ret = nsi_host_write(d->out_fd, buf + sent, len - sent);
+		if (ret > 0) {
+			sent += ret;
+			continue;
+		}
+		if (np_uart_slave_connected(d->out_fd) != 1) {
+			break;
+		}
+		np_uart_wait_writable_bottom(d->out_fd);
+	}
+	ret = sent;
 
 #if defined(CONFIG_TRACING) && defined(CONFIG_TRACING_PERFETTO)
 	if (d->tx_track_uuid == 0) {
