@@ -1,0 +1,29 @@
+common:
+  platform_allow:
+    - native_sim/native/64
+  tags:
+    - settings
+    - flash
+tests:
+  settings.sector_geometry.nvs.valid:
+    extra_args: EXTRA_CONF_FILE=nvs.conf
+  settings.sector_geometry.nvs.empty:
+    extra_args:
+      - EXTRA_CONF_FILE=nvs.conf
+      - DTC_OVERLAY_FILE=unaligned.overlay
+  settings.sector_geometry.zms.valid:
+    extra_args: EXTRA_CONF_FILE=zms.conf
+  settings.sector_geometry.zms.empty:
+    extra_args:
+      - EXTRA_CONF_FILE=zms.conf
+      - DTC_OVERLAY_FILE=unaligned.overlay
+  settings.sector_geometry.zms.custom.valid:
+    extra_args: EXTRA_CONF_FILE=zms.conf
+    extra_configs:
+      - CONFIG_SETTINGS_ZMS_CUSTOM_SECTOR_COUNT=y
+  settings.sector_geometry.zms.custom.empty:
+    extra_args:
+      - EXTRA_CONF_FILE=zms.conf
+      - DTC_OVERLAY_FILE=unaligned.overlay
+    extra_configs:
+      - CONFIG_SETTINGS_ZMS_CUSTOM_SECTOR_COUNT=y
