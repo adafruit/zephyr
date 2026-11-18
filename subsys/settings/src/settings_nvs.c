@@ -414,6 +414,10 @@ int settings_backend_init(void)
 	if (rc != 0 && rc != -ENOMEM) {
 		return rc;
 	}
+	if (sector_cnt == 0) {
+		/* No sector was returned, so hw_flash_sector is not initialized. */
+		return -EINVAL;
+	}
 
 	nvs_sector_size = CONFIG_SETTINGS_NVS_SECTOR_SIZE_MULT *
 			  hw_flash_sector.fs_size;
