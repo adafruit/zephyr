@@ -132,8 +132,10 @@ static int sreq_set_configuration(struct usbd_context *const uds_ctx)
 		return -EPERM;
 	}
 
-	if (setup->wValue == usbd_get_config_value(uds_ctx)) {
-		LOG_DBG("Already in the configuration %u", setup->wValue);
+	/* Selecting the current nonzero configuration must reinitialize its
+	 * interfaces and endpoints, including data toggles (USB 2.0, 9.1.1.5).
+	 */
+	if (setup->wValue == 0 && usbd_get_config_value(uds_ctx) == 0) {
 		return 0;
 	}
 
