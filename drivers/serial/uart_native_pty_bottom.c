@@ -155,6 +155,18 @@ int np_uart_slave_connected(int fd)
 }
 
 /**
+ * @brief Wait until the PTY master can take more output, or for 100 ms
+ *
+ * @param fd file number of the PTY master
+ */
+void np_uart_wait_writable_bottom(int fd)
+{
+	struct pollfd pfd = { .fd = fd, .events = POLLOUT };
+
+	(void)poll(&pfd, 1, 100);
+}
+
+/**
  * Attempt to connect a terminal emulator to the slave side of the pty
  * If -attach_uart_cmd=<cmd> is provided as a command line option, <cmd> will be
  * used. Otherwise, the default command,
