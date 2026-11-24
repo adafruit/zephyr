@@ -750,6 +750,16 @@ static int udc_mcux_init(const struct device *dev)
 		usbBase->PORTSC1 |= USBHS_PORTSC1_PFSC_MASK;
 	}
 
+#if (defined USB_DEVICE_CONFIG_DETACH_ENABLE) && (USB_DEVICE_CONFIG_DETACH_ENABLE > 0U)
+	/*
+	 * The controller only interrupts when VBUS changes, so a cable that is
+	 * already plugged in at init is never reported. Report it here.
+	 */
+	if ((((USBHS_Type *)base)->OTGSC & USBHS_OTGSC_BSV_MASK) != 0U) {
+		udc_submit_event(dev, UDC_EVT_VBUS_READY, 0);
+	}
+#endif
+
 	/* enable USB interrupt */
 	config->irq_enable_func(dev);
 
